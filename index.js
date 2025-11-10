@@ -5,11 +5,20 @@ const app = express();
 app.use(express.json());
 
 // 🔹 Initialize Firebase Admin SDK
-const serviceAccount = require("./serviceAccountKey.json");
+// const serviceAccount = require("./serviceAccountKey.json");
+
+const admin = require('firebase-admin');
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
 });
+
+console.log('Firebase initialized successfully!');
+
 
 // 🔹 Test route
 app.get("/", (req, res) => {
