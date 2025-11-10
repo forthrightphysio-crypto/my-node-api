@@ -1,14 +1,10 @@
 const express = require("express");
-const admin = require("firebase-admin");
+const admin = require("firebase-admin"); // ← only once
 
 const app = express();
 app.use(express.json());
 
 // 🔹 Initialize Firebase Admin SDK
-// const serviceAccount = require("./serviceAccountKey.json");
-
-const admin = require('firebase-admin');
-
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -18,7 +14,6 @@ admin.initializeApp({
 });
 
 console.log('Firebase initialized successfully!');
-
 
 // 🔹 Test route
 app.get("/", (req, res) => {
@@ -56,7 +51,7 @@ app.post("/schedule", async (req, res) => {
   }
 
   try {
-    const scheduleDateTime = new Date(`${date} ${time}`); // e.g. "2025-11-10 13:00"
+    const scheduleDateTime = new Date(`${date} ${time}`);
     const now = new Date();
     const delay = scheduleDateTime - now;
 
@@ -75,7 +70,6 @@ app.post("/schedule", async (req, res) => {
       try {
         await admin.messaging().send(message);
         console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
-        console.log(`📤 Title: "${title}" | Body: "${body}"`);
       } catch (err) {
         console.error("❌ Error sending scheduled notification:", err);
       }
@@ -89,7 +83,5 @@ app.post("/schedule", async (req, res) => {
 });
 
 // 🔹 Start server
-// 🔹 Start server
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
-
