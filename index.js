@@ -38,47 +38,6 @@ app.post("/send", async (req, res) => {
   }
 });
 
-// 🔹 Schedule notification route
-app.post("/schedule", async (req, res) => {
-  const { token, title, body, date, time } = req.body;
-
-  if (!token || !title || !body || !date || !time) {
-    return res.status(400).send("Missing required fields");
-  }
-
-  try {
-    const scheduleDateTime = new Date(`${date} ${time}`); // e.g. "2025-11-10 13:00"
-    const now = new Date();
-    const delay = scheduleDateTime - now;
-
-    if (delay <= 0) {
-      return res.status(400).send("Scheduled time must be in the future");
-    }
-
-    console.log(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-    console.log(`📦 Details → Title: "${title}", Body: "${body}", Token: ${token.substring(0, 10)}...`);
-
-    setTimeout(async () => {
-      const message = {
-        notification: { title, body },
-        token,
-      };
-      try {
-        await admin.messaging().send(message);
-        console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
-        console.log(`📤 Title: "${title}" | Body: "${body}"`);
-      } catch (err) {
-        console.error("❌ Error sending scheduled notification:", err);
-      }
-    }, delay);
-
-    res.send(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-  } catch (error) {
-    console.error("❌ Scheduling error:", error);
-    res.status(500).send("Error scheduling notification");
-  }
-});
-
 // 🔹 Start server
 // 🔹 Start server
 const PORT = 3000;
