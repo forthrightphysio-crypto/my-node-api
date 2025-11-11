@@ -46,7 +46,8 @@ app.post("/send", async (req, res) => {
 app.post("/schedule", async (req, res) => {
   const { token, title, body, date, time } = req.body;
 
-  if (!token || !title || !body || !date || !time) {
+  // Basic required fields check (except token)
+  if (!title || !body || !date || !time) {
     return res.status(400).send("Missing required fields");
   }
 
@@ -60,18 +61,25 @@ app.post("/schedule", async (req, res) => {
     }
 
     console.log(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-    console.log(`📦 Details → Title: "${title}", Body: "${body}", Token: ${token.substring(0, 10)}...`);
+    console.log(`📦 Details → Title: "${title}", Body: "${body}"`);
 
+    // Schedule the task
     setTimeout(async () => {
+      if (!token || token.trim() === "") {
+        console.warn("⚠️ No token provided — skipping notification send.");
+        return;
+      }
+
       const message = {
         notification: { title, body },
         token,
       };
+
       try {
         await admin.messaging().send(message);
         console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
       } catch (err) {
-        console.error("❌ Error sending scheduled notification:", err);
+        console.error("❌ Error sending scheduled notification:", err.message);
       }
     }, delay);
 
@@ -82,6 +90,56 @@ app.post("/schedule", async (req, res) => {
   }
 });
 
+
 // 🔹 Start server
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+
+
+
+
+// const express = require("express");
+// const admin = require("firebase-admin");
+
+// const app = express();
+// app.use(express.json());
+
+// // 🔹 Initialize Firebase Admin SDK
+// const serviceAccount = require("./serviceAccountKey.json");
+
+// admin.initializeApp({
+//   credential: admin.credential.cert(serviceAccount),
+// });
+
+// // 🔹 Test route
+// app.get("/", (req, res) => {
+//   res.send("✅ FCM Server is running");
+// });
+
+// // 🔹 Send notification route
+// app.post("/send", async (req, res) => {
+//   const { token, title, body } = req.body;
+
+//   if (!token || !title || !body) {
+//     return res.status(400).send("Missing fields");
+//   }
+
+//   const message = {
+//     notification: { title, body },
+//     token,
+//   };
+
+//   try {
+//     await admin.messaging().send(message);
+//     res.send("✅ Notification sent successfully!");
+//   } catch (error) {
+//     console.error("❌ Error sending message:", error);
+//     res.status(500).send("Error sending message");
+//   }
+// });
+
+// // 🔹 Start server
+// // 🔹 Start server
+// const PORT = 3000;
+// app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+
