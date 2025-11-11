@@ -46,7 +46,8 @@ app.post("/send", async (req, res) => {
 app.post("/schedule", async (req, res) => {
   const { token, title, body, date, time } = req.body;
 
-  if (!token || !title || !body || !date || !time) {
+  // Basic required fields check (except token)
+  if (!title || !body || !date || !time) {
     return res.status(400).send("Missing required fields");
   }
 
@@ -60,18 +61,25 @@ app.post("/schedule", async (req, res) => {
     }
 
     console.log(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-    console.log(`📦 Details → Title: "${title}", Body: "${body}", Token: ${token.substring(0, 10)}...`);
+    console.log(`📦 Details → Title: "${title}", Body: "${body}"`);
 
+    // Schedule the task
     setTimeout(async () => {
+      if (!token || token.trim() === "") {
+        console.warn("⚠️ No token provided — skipping notification send.");
+        return;
+      }
+
       const message = {
         notification: { title, body },
         token,
       };
+
       try {
         await admin.messaging().send(message);
         console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
       } catch (err) {
-        console.error("❌ Error sending scheduled notification:", err);
+        console.error("❌ Error sending scheduled notification:", err.message);
       }
     }, delay);
 
@@ -81,6 +89,7 @@ app.post("/schedule", async (req, res) => {
     res.status(500).send("Error scheduling notification");
   }
 });
+
 
 // 🔹 Start server
 const PORT = 3000;
