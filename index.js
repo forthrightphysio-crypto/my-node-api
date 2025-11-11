@@ -51,9 +51,14 @@ app.post("/schedule", async (req, res) => {
   }
 
   try {
-    const scheduleDateTime = new Date(`${date} ${time}`);
-    const now = new Date();
-    const delay = scheduleDateTime - now;
+    const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
+const now = new Date();
+const delay = scheduleDateTime - now;
+
+console.log(`🕒 Now: ${now.toLocaleString()}`);
+console.log(`🕒 Schedule Time (IST): ${scheduleDateTime.toLocaleString()}`);
+console.log(`⏳ Delay: ${delay / 1000} seconds`);
+
 
     if (delay <= 0) {
       return res.status(400).send("Scheduled time must be in the future");
