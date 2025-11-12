@@ -95,65 +95,47 @@ app.post("/schedule", async (req, res) => {
   }
 });
 
-// 🔹 Fetch valid admin tokens
 app.get("/admin-tokens", async (req, res) => {
   try {
-    const snapshot = await admin.firestore().collection('adminTokens').get();
+    const tokensSnapshot = await admin.firestore().collection('adminTokens').get();
 
-    if (snapshot.empty) {
-      return res.status(200).json({ tokens: [] });
+    if (tokensSnapshot.empty) {
+      return res.status(200).send({ tokens: [] });
     }
 
-    const tokensSet = new Set(); // to automatically remove duplicates
-    const tokensToDelete = [];
+    const tokenPromises = [];
+    const tokenMap = new Map(); // To remove duplicates
 
-    snapshot.forEach(doc => {
-      const token = doc.id; // assuming doc id is token
-      if (!token) return;
+    tokensSnapshot.forEach(doc => {
+      const token = doc.id; // Assuming doc.id is the token
+      if (!tokenMap.has(token)) {
+        tokenMap.set(token, true);
 
-      // Add to set (duplicates automatically removed)
-      if (tokensSet.has(token)) {
-        // duplicate, mark for deletion
-        tokensToDelete.push(doc.ref);
-      } else {
-        tokensSet.add(token);
+        // Check if token is still valid using FCM dry run
+        const message = { token, dryRun: true };
+        tokenPromises.push(
+          admin.messaging().send(message)
+            .then(() => token) // token is valid
+            .catch(err => {
+              // If token invalid, remove from Firestore
+              if (err.code === 'messaging/registration-token-not-registered') {
+                console.log(`❌ Token invalid, removing: ${token}`);
+                return admin.firestore().collection('adminTokens').doc(token).delete().then(() => null);
+              } else {
+                console.error('Error checking token:', err);
+                return null;
+              }
+            })
+        );
       }
     });
 
-    // Delete duplicate tokens from Firestore
-    for (const ref of tokensToDelete) {
-      try {
-        await ref.delete();
-        console.log(`🗑 Duplicate token deleted: ${ref.id}`);
-      } catch (err) {
-        console.error(`❌ Failed to delete duplicate token ${ref.id}:`, err);
-      }
-    }
+    const validTokens = (await Promise.all(tokenPromises)).filter(Boolean);
 
-    const tokensArray = Array.from(tokensSet);
-
-    // Optional: check which tokens are still valid with Firebase
-    const validTokens = [];
-    for (const token of tokensArray) {
-      try {
-        // Sends a dry run message to validate token
-        await admin.messaging().send({ token, dryRun: true });
-        validTokens.push(token);
-      } catch (error) {
-        if (error.code === 'messaging/registration-token-not-registered') {
-          console.log(`❌ Token uninstalled, removing: ${token}`);
-          // Delete invalid token
-          await admin.firestore().collection('adminTokens').doc(token).delete();
-        } else {
-          console.error(`❌ Error validating token ${token}:`, error);
-        }
-      }
-    }
-
-    res.json({ tokens: validTokens });
+    res.status(200).send({ tokens: validTokens });
   } catch (error) {
     console.error("❌ Error fetching admin tokens:", error);
-    res.status(500).send("Error fetching tokens");
+    res.status(500).send("Error fetching admin tokens");
   }
 });
 
