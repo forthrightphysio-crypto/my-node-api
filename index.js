@@ -95,6 +95,67 @@ app.post("/schedule", async (req, res) => {
   }
 });
 
+// 🔹 Fetch valid admin tokens
+app.get("/admin-tokens", async (req, res) => {
+  try {
+    const snapshot = await admin.firestore().collection('adminTokens').get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({ tokens: [] });
+    }
+
+    const tokensSet = new Set(); // to automatically remove duplicates
+    const tokensToDelete = [];
+
+    snapshot.forEach(doc => {
+      const token = doc.id; // assuming doc id is token
+      if (!token) return;
+
+      // Add to set (duplicates automatically removed)
+      if (tokensSet.has(token)) {
+        // duplicate, mark for deletion
+        tokensToDelete.push(doc.ref);
+      } else {
+        tokensSet.add(token);
+      }
+    });
+
+    // Delete duplicate tokens from Firestore
+    for (const ref of tokensToDelete) {
+      try {
+        await ref.delete();
+        console.log(`🗑 Duplicate token deleted: ${ref.id}`);
+      } catch (err) {
+        console.error(`❌ Failed to delete duplicate token ${ref.id}:`, err);
+      }
+    }
+
+    const tokensArray = Array.from(tokensSet);
+
+    // Optional: check which tokens are still valid with Firebase
+    const validTokens = [];
+    for (const token of tokensArray) {
+      try {
+        // Sends a dry run message to validate token
+        await admin.messaging().send({ token, dryRun: true });
+        validTokens.push(token);
+      } catch (error) {
+        if (error.code === 'messaging/registration-token-not-registered') {
+          console.log(`❌ Token uninstalled, removing: ${token}`);
+          // Delete invalid token
+          await admin.firestore().collection('adminTokens').doc(token).delete();
+        } else {
+          console.error(`❌ Error validating token ${token}:`, error);
+        }
+      }
+    }
+
+    res.json({ tokens: validTokens });
+  } catch (error) {
+    console.error("❌ Error fetching admin tokens:", error);
+    res.status(500).send("Error fetching tokens");
+  }
+});
 
 // 🔹 Start server
 const PORT = 3000;
