@@ -138,10 +138,16 @@ app.post("/notify-admins", async (req, res) => {
     });
 
     res.send(`✅ Notifications sent to ${response.successCount} admins`);
-  } catch (error) {
-    console.error("❌ Error sending admin notifications:", error);
-    res.status(500).send("Error sending notifications");
-  }
+} catch (error) {
+  console.error("❌ Error sending admin notifications:", error);
+
+  // Send actual error message in response
+  res.status(500).json({
+    message: "Error sending notifications",
+    error: error.message || error.toString()
+  });
+}
+
 });
 
 
