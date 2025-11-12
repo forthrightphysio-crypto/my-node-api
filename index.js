@@ -114,6 +114,35 @@ app.get("/adminTokens", async (req, res) => {
     res.status(500).json({ error: "Error fetching admin tokens" });
   }
 });
+// 🔹 Send notification to all admins
+app.post("/notify-admins", async (req, res) => {
+  const { title, body } = req.body;
+
+  if (!title || !body) return res.status(400).send("Missing title or body");
+
+  try {
+    const adminSnapshot = await admin.firestore().collection('adminTokens').get();
+
+    const tokens = adminSnapshot.docs.map(doc => doc.id).filter(Boolean);
+    if (!tokens.length) return res.status(200).send("No admin tokens available");
+
+    const message = { notification: { title, body }, tokens };
+
+    const response = await admin.messaging().sendMulticast(message);
+
+    console.log(`✅ Sent to ${response.successCount}/${tokens.length} admins`);
+    response.responses.forEach((resp, idx) => {
+      if (!resp.success) {
+        console.log(`❌ Failed token: ${tokens[idx]} → ${resp.error}`);
+      }
+    });
+
+    res.send(`✅ Notifications sent to ${response.successCount} admins`);
+  } catch (error) {
+    console.error("❌ Error sending admin notifications:", error);
+    res.status(500).send("Error sending notifications");
+  }
+});
 
 
 
