@@ -52,13 +52,12 @@ app.post("/schedule", async (req, res) => {
 
   try {
     const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
-const now = new Date();
-const delay = scheduleDateTime - now;
+    const now = new Date();
+    const delay = scheduleDateTime - now;
 
-console.log(`🕒 Now: ${now.toLocaleString()}`);
-console.log(`🕒 Schedule Time (IST): ${scheduleDateTime.toLocaleString()}`);
-console.log(`⏳ Delay: ${delay / 1000} seconds`);
-
+    console.log(`🕒 Now: ${now.toLocaleString()}`);
+    console.log(`🕒 Schedule Time (IST): ${scheduleDateTime.toLocaleString()}`);
+    console.log(`⏳ Delay: ${delay / 1000} seconds`);
 
     if (delay <= 0) {
       return res.status(400).send("Scheduled time must be in the future");
@@ -68,15 +67,24 @@ console.log(`⏳ Delay: ${delay / 1000} seconds`);
     console.log(`📦 Details → Title: "${title}", Body: "${body}", Token: ${token.substring(0, 10)}...`);
 
     setTimeout(async () => {
-      const message = {
-        notification: { title, body },
-        token,
-      };
+      const message = { notification: { title, body }, token };
+
       try {
         await admin.messaging().send(message);
         console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
-      } catch (err) {
-        console.error("❌ Error sending scheduled notification:", err);
+      } catch (error) {
+        // ✅ Handle invalid token
+        if (error.code === 'messaging/registration-token-not-registered') {
+          console.log("❌ Token is invalid, removing from Firestore:", token);
+          try {
+            await admin.firestore().collection('adminTokens').doc(token).delete();
+            console.log("🗑 Token removed successfully.");
+          } catch (deleteError) {
+            console.error("❌ Failed to remove token from Firestore:", deleteError);
+          }
+        } else {
+          console.error("❌ Error sending scheduled notification:", error);
+        }
       }
     }, delay);
 
@@ -86,6 +94,7 @@ console.log(`⏳ Delay: ${delay / 1000} seconds`);
     res.status(500).send("Error scheduling notification");
   }
 });
+
 
 // 🔹 Start server
 const PORT = 3000;
