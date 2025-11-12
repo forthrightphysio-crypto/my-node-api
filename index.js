@@ -136,8 +136,6 @@ app.post("/notify-admins", async (req, res) => {
 });
 
 
-});
-
 
 
 // 🔹 Start server
