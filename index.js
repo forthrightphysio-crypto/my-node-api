@@ -124,11 +124,26 @@ app.post("/notify-admins", async (req, res) => {
     const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
     if (!tokens.length) return res.status(200).send("No admin tokens available");
 
-    const message = { notification: { title, body }, tokens };
-    const response = await admin.messaging().sendMulticast(message);
+    console.log("Tokens to send:", tokens);
 
-    console.log(`✅ Sent to ${response.successCount}/${tokens.length} admins`);
-    res.send(`✅ Notifications sent to ${response.successCount} admins`);
+    const results = await Promise.all(tokens.map(async (token) => {
+      try {
+        await admin.messaging().send({ notification: { title, body }, token });
+        return { token, success: true };
+      } catch (err) {
+        console.error(`❌ Failed token ${token}:`, err.message);
+        // Remove invalid token
+        if (err.code === 'messaging/registration-token-not-registered') {
+          await admin.firestore().collection('adminTokens').doc(token).delete();
+          console.log(`🗑 Token removed: ${token}`);
+        }
+        return { token, success: false, error: err.message };
+      }
+    }));
+
+    const successCount = results.filter(r => r.success).length;
+    res.send(`✅ Notifications sent to ${successCount}/${tokens.length} admins`);
+
   } catch (error) {
     console.error("❌ Error sending admin notifications:", error);
     res.status(500).json({ message: "Error sending notifications", error: error.message });
