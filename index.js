@@ -106,7 +106,7 @@ app.post("/send-to-admins", async (req, res) => {
   try {
     const adminSnapshot = await admin.firestore().collection('adminTokens').get();
 
-    const tokens = adminSnapshot.docs.map(doc => doc['token']).filter(Boolean);
+    const tokens = adminSnapshot.docs.map(doc => doc.id).filter(Boolean);
 
     if (tokens.length === 0) {
       return res.status(200).send("No admin tokens available");
