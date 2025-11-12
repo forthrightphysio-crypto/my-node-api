@@ -96,96 +96,28 @@ app.post("/schedule", async (req, res) => {
 });
 
 // 🔹 Send notification to all admins
-app.post("/send-to-admins", async (req, res) => {
-  const { title, body } = req.body;
-
-  if (!title || !body) {
-    return res.status(400).send("Missing title or body");
-  }
-
+// 🔹 Fetch all admin tokens
+app.get("/adminTokens", async (req, res) => {
   try {
-    const adminSnapshot = await admin.firestore().collection('adminTokens').get();
+    const snapshot = await admin.firestore().collection("adminTokens").get();
 
-    const tokens = adminSnapshot.docs.map(doc => doc.id).filter(Boolean);
-
-    if (tokens.length === 0) {
-      return res.status(200).send("No admin tokens available");
+    if (snapshot.empty) {
+      return res.status(200).json({ tokens: [], message: "No admin tokens found" });
     }
 
-    // Send multicast message
-    const message = {
-      notification: { title, body },
-      tokens,
-    };
+    // Collect document IDs (the tokens)
+    const tokens = snapshot.docs.map(doc => doc.id);
 
-    const response = await admin.messaging().sendMulticast(message);
-
-    console.log(`✅ Sent to ${response.successCount}/${tokens.length} admins`);
-    if (response.failureCount > 0) {
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          console.log(`❌ Failed token: ${tokens[idx]} → ${resp.error}`);
-        }
-      });
-    }
-
-    res.send(`✅ Notifications sent to ${response.successCount} admins`);
+    res.status(200).json({ tokens });
   } catch (error) {
-    console.error("❌ Error sending admin notifications:", error);
-    res.status(500).send("Error sending notifications");
+    console.error("❌ Error fetching admin tokens:", error);
+    res.status(500).json({ error: "Error fetching admin tokens" });
   }
 });
+
 
 
 // 🔹 Start server
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
-
-
-
-
-// const express = require("express");
-// const admin = require("firebase-admin");
-
-// const app = express();
-// app.use(express.json());
-
-// // 🔹 Initialize Firebase Admin SDK
-// const serviceAccount = require("./serviceAccountKey.json");
-
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// });
-
-// // 🔹 Test route
-// app.get("/", (req, res) => {
-//   res.send("✅ FCM Server is running");
-// });
-
-// // 🔹 Send notification route
-// app.post("/send", async (req, res) => {
-//   const { token, title, body } = req.body;
-
-//   if (!token || !title || !body) {
-//     return res.status(400).send("Missing fields");
-//   }
-
-//   const message = {
-//     notification: { title, body },
-//     token,
-//   };
-
-//   try {
-//     await admin.messaging().send(message);
-//     res.send("✅ Notification sent successfully!");
-//   } catch (error) {
-//     console.error("❌ Error sending message:", error);
-//     res.status(500).send("Error sending message");
-//   }
-// });
-
-// // 🔹 Start server
-// // 🔹 Start server
-// const PORT = 3000;
-// app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
 
