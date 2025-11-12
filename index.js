@@ -96,30 +96,38 @@ app.post("/schedule", async (req, res) => {
 });
 
 // 🔹 Fetch valid admin tokens API
-app.get("/adminTokens", async (req, res) => {
+app.get("/adminTokensq", async (req, res) => {
   try {
     const snapshot = await admin.firestore().collection("adminTokens").get();
-    const tokens = snapshot.docs.map(doc => doc.id); // assuming doc ID = token
 
-    if (tokens.length === 0) {
+    if (snapshot.empty) {
       return res.json({ tokens: [] });
     }
 
-    // Use sendMulticast with silent notification to validate tokens
-    const message = { tokens, notification: { title: '', body: '' } };
-    const response = await admin.messaging().sendMulticast(message);
-
+    const tokens = snapshot.docs.map(doc => doc.id); // or doc.data().token if stored as field
     const validTokens = [];
-    response.responses.forEach((resp, idx) => {
-      if (resp.success) {
-        validTokens.push(tokens[idx]);
-      } else if (resp.error.code === 'messaging/registration-token-not-registered') {
-        console.log(`❌ Token invalid, removing: ${tokens[idx]}`);
-        admin.firestore().collection("adminTokens").doc(tokens[idx]).delete();
-      } else {
-        console.error(`❌ Other error for token ${tokens[idx]}:`, resp.error);
-      }
-    });
+
+    // FCM allows up to 500 tokens per sendMulticast
+    const chunkSize = 500;
+    for (let i = 0; i < tokens.length; i += chunkSize) {
+      const chunk = tokens.slice(i, i + chunkSize);
+
+      // send silent notification
+      const message = { tokens: chunk, android: { priority: "high" }, apns: { headers: { "apns-push-type": "background" } } };
+
+      const response = await admin.messaging().sendMulticast(message);
+
+      response.responses.forEach((resp, idx) => {
+        if (resp.success) {
+          validTokens.push(chunk[idx]);
+        } else if (resp.error.code === 'messaging/registration-token-not-registered') {
+          console.log(`❌ Invalid token removed: ${chunk[idx]}`);
+          admin.firestore().collection("adminTokens").doc(chunk[idx]).delete();
+        } else {
+          console.error(`⚠️ Other error for token ${chunk[idx]}:`, resp.error);
+        }
+      });
+    }
 
     res.json({ tokens: validTokens });
   } catch (error) {
@@ -127,6 +135,7 @@ app.get("/adminTokens", async (req, res) => {
     res.status(500).send("Error fetching valid tokens");
   }
 });
+
 
 
 // 🔹 Start server
