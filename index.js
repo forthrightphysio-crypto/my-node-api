@@ -151,6 +151,66 @@ app.post("/notify-admins", async (req, res) => {
 });
 
 
+// 🔹 Schedule notification for ALL admins
+app.post("/schedule-admins", async (req, res) => {
+  const { title, body, date, time } = req.body;
+
+  if (!title || !body || !date || !time) {
+    return res.status(400).send("Missing required fields: title, body, date, or time");
+  }
+
+  try {
+    // Get all admin tokens
+    const snapshot = await admin.firestore().collection("adminTokens").get();
+    const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
+
+    if (!tokens.length) {
+      return res.status(200).send("No admin tokens available");
+    }
+
+    // Calculate schedule time
+    const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
+    const now = new Date();
+    const delay = scheduleDateTime - now;
+
+    console.log(`🕒 Now: ${now.toLocaleString()}`);
+    console.log(`🕒 Scheduled (IST): ${scheduleDateTime.toLocaleString()}`);
+    console.log(`⏳ Delay: ${delay / 1000}s for ${tokens.length} admins`);
+
+    if (delay <= 0) {
+      return res.status(400).send("Scheduled time must be in the future");
+    }
+
+    // Schedule sending to all admins
+    setTimeout(async () => {
+      console.log(`📢 Sending scheduled admin notifications at ${new Date().toLocaleString()}`);
+      const results = await Promise.all(tokens.map(async (token) => {
+        try {
+          await admin.messaging().send({
+            notification: { title, body },
+            token,
+          });
+          return { token, success: true };
+        } catch (err) {
+          console.error(`❌ Failed token ${token}:`, err.code);
+          if (err.code === 'messaging/registration-token-not-registered') {
+            await admin.firestore().collection('adminTokens').doc(token).delete();
+            console.log(`🗑 Removed invalid token: ${token}`);
+          }
+          return { token, success: false };
+        }
+      }));
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`✅ Sent to ${successCount}/${tokens.length} admins`);
+    }, delay);
+
+    res.send(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()} to ${tokens.length} admins`);
+  } catch (error) {
+    console.error("❌ Error scheduling admin notifications:", error);
+    res.status(500).send("Error scheduling admin notifications");
+  }
+});
 
 
 // 🔹 Start server
