@@ -169,7 +169,7 @@ app.post("/schedule-admins", async (req, res) => {
     }
 
     // Calculate schedule time
-    const scheduleDateTime = new Date(`${date}T${time}:00+01:30`);
+    const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
     const now = new Date();
     const delay = scheduleDateTime - now;
 
