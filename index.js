@@ -169,9 +169,13 @@ app.post("/schedule-admins", async (req, res) => {
     }
 
     // Calculate schedule time
-    const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
-    const now = new Date();
-    const delay = scheduleDateTime - now;
+    // const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
+    // const now = new Date();
+    // const delay = scheduleDateTime - now;
+    // 🕒 Immediately trigger send (no timezone offset, no delay)
+    const scheduleDateTime = new Date(); // current time
+    const delay = 0;
+
 
     console.log(`🕒 Now: ${now.toLocaleString()}`);
     console.log(`🕒 Scheduled (IST): ${scheduleDateTime.toLocaleString()}`);
