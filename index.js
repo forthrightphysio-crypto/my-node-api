@@ -1,9 +1,6 @@
 const express = require("express");
 const admin = require("firebase-admin"); // ← only once
 
-const fs = require("fs");
-const path = require("path");
-
 const app = express();
 app.use(express.json());
 
@@ -231,55 +228,6 @@ app.post("/schedule-admins", async (req, res) => {
   }
 });
 
-app.get("/video/:name", (req, res) => {
-  const videoName = req.params.name;
-  const videoPath = path.join(__dirname, "video", videoName);
-
-  // Check if file exists
-  if (!fs.existsSync(videoPath)) {
-    return res.status(404).send("❌ Video not found");
-  }
-
-  const stat = fs.statSync(videoPath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-
-  if (!range) {
-    // If client didn't request range, send 416 (Range Required)
-    res.status(416).send("Range header required");
-    return;
-  }
-
-  // Parse the range header (bytes=START-END)
-  const parts = range.replace(/bytes=/, "").split("-");
-  const start = parseInt(parts[0], 10);
-  const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-  // Validate range
-  if (start >= fileSize || end >= fileSize) {
-    res.status(416).send("Requested range not satisfiable\n" + fileSize);
-    return;
-  }
-
-  const chunkSize = end - start + 1;
-  const file = fs.createReadStream(videoPath, { start, end });
-
-  const head = {
-    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-    "Accept-Ranges": "bytes",
-    "Content-Length": chunkSize,
-    "Content-Type": "video/mp4",
-  };
-
-  res.writeHead(206, head); // Partial content
-  file.pipe(res);
-
-  // Optional: handle stream errors
-  file.on("error", (err) => {
-    console.error("❌ Video stream error:", err);
-    res.status(500).end(err);
-  });
-});
 
 
 // 🔹 Start server
