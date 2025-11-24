@@ -228,6 +228,56 @@ app.post("/schedule-admins", async (req, res) => {
   }
 });
 
+const fs = require("fs");
+const path = require("path");
+
+// ------------------------
+// 🎥 VIDEO STREAMING API
+// ------------------------
+app.get("/video/:name", (req, res) => {
+  // 🔹 Token security (change "MY_SECRET_TOKEN" as you like)
+  if (req.query.token !== "MY_SECRET_TOKEN") {
+    return res.status(403).send("❌ Unauthorized access");
+  }
+
+  // 🔹 Construct full video path
+  const videoName = req.params.name;
+  // Replace backslashes in path for cross-platform safety
+  const videoPath = path.join("D:/fcm-server/video", videoName);
+
+  // 🔹 Check if file exists
+  if (!fs.existsSync(videoPath)) {
+    return res.status(404).send("❌ Video not found");
+  }
+
+  const stat = fs.statSync(videoPath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  if (!range) {
+    return res.status(416).send("❌ Range header required");
+  }
+
+  const CHUNK_SIZE = 10 ** 6; // 1MB chunks
+  const start = Number(range.replace(/\D/g, ""));
+  const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
+
+  const contentLength = end - start + 1;
+
+  const headers = {
+    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+    "Accept-Ranges": "bytes",
+    "Content-Length": contentLength,
+    "Content-Type": "video/mp4",
+  };
+
+  res.writeHead(206, headers);
+
+  const videoStream = fs.createReadStream(videoPath, { start, end });
+  videoStream.pipe(res);
+
+  console.log(`🎬 Streaming video: ${videoName} | Range: ${start}-${end}`);
+});
 
 
 // 🔹 Start server
