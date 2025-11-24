@@ -235,11 +235,6 @@ const path = require("path");
 // 🎥 VIDEO STREAMING API
 // ------------------------
 app.get("/video/:name", (req, res) => {
-  // 🔹 Token security (change "MY_SECRET_TOKEN" as you like)
-  if (req.query.token !== "MY_SECRET_TOKEN") {
-    return res.status(403).send("❌ Unauthorized access");
-  }
-
   // 🔹 Construct full video path
   const videoName = req.params.name;
   // Replace backslashes in path for cross-platform safety
@@ -278,6 +273,7 @@ app.get("/video/:name", (req, res) => {
 
   console.log(`🎬 Streaming video: ${videoName} | Range: ${start}-${end}`);
 });
+
 
 
 // 🔹 Start server
