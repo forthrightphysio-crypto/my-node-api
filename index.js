@@ -228,17 +228,14 @@ app.post("/schedule-admins", async (req, res) => {
   }
 });
 
-const fs = require("fs");
 const path = require("path");
+const fs = require("fs");
 
-// ------------------------
-// 🎥 VIDEO STREAMING API
-// ------------------------
 app.get("/video/:name", (req, res) => {
-  // 🔹 Construct full video path
   const videoName = req.params.name;
-  // Replace backslashes in path for cross-platform safety
-  const videoPath = path.join("D:/fcm-server/video", videoName);
+
+  // 🔹 Construct full path dynamically relative to project folder
+  const videoPath = path.join(__dirname, "video", videoName); // __dirname = fcm-server folder
 
   // 🔹 Check if file exists
   if (!fs.existsSync(videoPath)) {
@@ -273,7 +270,6 @@ app.get("/video/:name", (req, res) => {
 
   console.log(`🎬 Streaming video: ${videoName} | Range: ${start}-${end}`);
 });
-
 
 
 // 🔹 Start server
