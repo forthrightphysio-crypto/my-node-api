@@ -1,9 +1,5 @@
 const express = require("express");
-const admin = require("firebase-admin"); // Firebase Admin SDK
-const multer = require("multer"); // For handling file uploads
-const path = require("path");
-const fs = require("fs");
-
+const admin = require("firebase-admin"); // ← only once
 
 const app = express();
 app.use(express.json());
@@ -232,38 +228,6 @@ app.post("/schedule-admins", async (req, res) => {
   }
 });
 
-app.post("/upload-video", upload.single("video"), async (req, res) => {
-  if (!req.file) return res.status(400).send("No video uploaded");
-
-  const localFilePath = req.file.path;
-  const destination = `videos/${req.file.filename}`;
-
-  try {
-    // Upload to Firebase Storage
-    await bucket.upload(localFilePath, {
-      destination,
-      metadata: { contentType: req.file.mimetype },
-    });
-
-    // Delete local file after upload
-    fs.unlinkSync(localFilePath);
-
-    // Generate signed URL for video
-    const file = bucket.file(destination);
-    const [url] = await file.getSignedUrl({
-      action: "read",
-      expires: "03-01-2500", // long-term URL
-    });
-
-    res.status(200).json({
-      message: "✅ Video uploaded successfully",
-      url,
-    });
-  } catch (error) {
-    console.error("❌ Video upload error:", error);
-    res.status(500).send("Error uploading video");
-  }
-});
 
 
 // 🔹 Start server
