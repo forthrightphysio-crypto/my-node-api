@@ -227,34 +227,6 @@ app.post("/schedule-admins", async (req, res) => {
     res.status(500).send("Error scheduling admin notifications");
   }
 });
-const request = require("request");
-
-// 🔹 Stream Google Drive video with Range support
-app.get("/stream/:fileId", async (req, res) => {
-  const fileId = req.params.fileId;
-
-  if (!fileId) return res.status(400).send("Missing file ID");
-
-  const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  const range = req.headers.range;
-
-  if (!range) {
-    return res.status(416).send("Range header is required for streaming");
-  }
-
-  console.log("🎥 Streaming video:", fileId);
-  console.log("➡ Range:", range);
-
-  request({
-    url: driveUrl,
-    headers: { Range: range },
-    method: "GET"
-  })
-    .on("response", (driveRes) => {
-      res.writeHead(driveRes.statusCode, driveRes.headers);
-    })
-    .pipe(res);
-});
 
 
 
