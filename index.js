@@ -232,45 +232,44 @@ app.post("/schedule-admins", async (req, res) => {
 const axios = require("axios");
 
 app.get("/stream/:fileId", async (req, res) => {
-  const fileId = req.params.fileId;
-
-  const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  const range = req.headers.range;
-
-  if (!range) {
-    return res.status(416).send("Range header is required");
-  }
-
   try {
+    const fileId = req.params.fileId;
+    const range = req.headers.range;
+
+    if (!range) {
+      return res.status(416).send("Range header required");
+    }
+
+    const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
     const head = await axios.head(driveUrl);
     const fileSize = head.headers["content-length"];
 
     const CHUNK_SIZE = 10 ** 6; // 1MB
     const start = Number(range.replace(/\D/g, ""));
     const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
-
-    const contentLength = end - start + 1;
+    const chunkSize = end - start + 1;
 
     res.writeHead(206, {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
-      "Content-Length": contentLength,
       "Content-Type": "video/mp4",
+      "Content-Length": chunkSize
     });
 
-    const videoStream = await axios({
-      url: driveUrl,
-      method: "GET",
+    const response = await axios.get(driveUrl, {
       responseType: "stream",
       headers: { Range: `bytes=${start}-${end}` }
     });
 
-    videoStream.data.pipe(res);
-  } catch (error) {
-    console.log("Stream Error:", error.message);
-    res.status(500).send("Error streaming video");
+    response.data.pipe(res);
+
+  } catch (err) {
+    console.error("Streaming error:", err);
+    res.status(500).send("Streaming failed");
   }
 });
+
 
 // 🔹 Start server
 const PORT = 3000;
