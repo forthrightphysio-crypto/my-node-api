@@ -80,37 +80,47 @@ app.get("/video/:name", async (req, res) => {
   const fileName = req.params.name;
   const range = req.headers.range;
 
-  if (!range) {
-    return res.status(400).send("Requires Range header");
-  }
-
   try {
     await b2.authorize();
 
-    // 1. Get file info
-    const file = await b2.getFileInfo({ fileId: process.env[`FILEID_${fileName}`] });
+    // 1. Get file info by fileId from env
+    const fileId = process.env[`FILEID_${fileName}`];
+    if (!fileId) {
+      return res.status(404).send("FileId not found in env");
+    }
+
+    const file = await b2.getFileInfo({ fileId });
     const fileSize = file.data.contentLength;
 
-    // 2. Parse Range header
-    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks
+    // ---- CASE 1: Chrome FIRST REQUEST (no Range header) ----
+    if (!range) {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Accept-Ranges": "bytes",
+        "Content-Type": "video/mp4",
+      });
+      return res.end(); // Chrome will send a second request with Range
+    }
+
+    // ---- CASE 2: Chrome SECOND REQUEST (with Range header) ----
+    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
     const start = Number(range.replace(/\D/g, ""));
     const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
 
-    // 3. Set streaming headers
     res.writeHead(206, {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
       "Content-Length": end - start + 1,
-      "Content-Type": "video/mp4"
+      "Content-Type": "video/mp4",
     });
 
-    // 4. Stream from B2
     const response = await b2.downloadFileById({
-      fileId: file.data.fileId,
-      range: `bytes=${start}-${end}`
+      fileId,
+      range: `bytes=${start}-${end}`,
     });
 
     response.data.pipe(res);
+
   } catch (err) {
     console.error(err);
     res.status(500).send("Streaming error");
