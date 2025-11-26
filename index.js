@@ -79,20 +79,23 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 app.get("/video/:name", async (req, res) => {
   const fileName = req.params.name;
 
-try {
-  const fileStream = await b2.downloadFileByName({
-    bucketName: process.env.B2_BUCKET_NAME,
-    fileName: fileName,
-  });
+  try {
+    const downloadResponse = await b2.downloadFileByName({
+      bucketName: process.env.B2_BUCKET_NAME,
+      fileName,
+    });
 
-  res.setHeader("Content-Type", "video/mp4");
-  res.send(fileStream.data); // This works for small files
-} catch (error) {
-  console.error("Error streaming video:", error);
-  res.status(500).send("Error streaming video");
-}
-
+    // Set headers for Chrome video playback
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+    
+    res.send(downloadResponse.data);
+  } catch (error) {
+    console.error("Error streaming video:", error);
+    res.status(500).send("Error streaming video");
+  }
 });
+
 
 
 // 🔹 Test route
