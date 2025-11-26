@@ -78,35 +78,46 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
 app.get("/video/:name", async (req, res) => {
   const fileName = req.params.name;
-
   try {
-    // 🔹 Get file info
+    // Get file info
     const fileInfo = await b2.getFileInfo({
       fileName,
       bucketId: process.env.B2_BUCKET_ID,
     });
 
-    // 🔹 Download the file
+    const fileSize = fileInfo.data.contentLength;
+    const range = req.headers.range;
+
+    if (!range) {
+      return res.status(400).send("Requires Range header");
+    }
+
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    const chunkSize = end - start + 1;
+
+    // Download only the requested range from B2
     const downloadResponse = await b2.downloadFileById({
       fileId: fileInfo.data.fileId,
+      range: `bytes=${start}-${end}`,
     });
 
-    const fileBuffer = downloadResponse.data;
-
-    // 🔹 Set headers for video streaming
-    res.set({
-      "Content-Type": "video/mp4",
-      "Content-Disposition": `inline; filename="${fileName}"`,
-      "Content-Length": fileBuffer.length,
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
+      "Content-Length": chunkSize,
+      "Content-Type": "video/mp4",
     });
 
-    res.send(fileBuffer);
+    res.end(downloadResponse.data, "binary");
   } catch (error) {
     console.error("❌ Error streaming video:", error);
     res.status(500).send("Error streaming video");
   }
 });
+
 
 // 🔹 Test route
 app.get("/", (req, res) => {
