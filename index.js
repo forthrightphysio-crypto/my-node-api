@@ -76,7 +76,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-app.get("/play/:filename", async (req, res) => {
+// 🔹 Direct streaming route for Chrome
+app.get("/stream/:filename", async (req, res) => {
   const fileName = req.params.filename;
 
   try {
@@ -95,11 +96,9 @@ app.get("/play/:filename", async (req, res) => {
     const fileId = fileInfo.fileId;
     const fileSize = fileInfo.contentLength;
 
-    // 2️⃣ Range header for streaming
+    // 2️⃣ Handle Range header
     const range = req.headers.range;
     if (!range) {
-      // Chrome will try to load the entire file if no range
-      // For large files, we can send first chunk or force range
       return res.status(416).send("Range header required for streaming");
     }
 
@@ -109,13 +108,13 @@ app.get("/play/:filename", async (req, res) => {
 
     const chunkSize = end - start + 1;
 
-    // 3️⃣ Download only required chunk from B2
+    // 3️⃣ Download only the requested chunk from B2
     const downloadResponse = await b2.downloadFileById({
       fileId,
       range: `bytes=${start}-${end}`,
     });
 
-    // 4️⃣ Set headers Chrome expects
+    // 4️⃣ Set headers for Chrome streaming
     res.writeHead(206, {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -123,7 +122,7 @@ app.get("/play/:filename", async (req, res) => {
       "Content-Type": fileInfo.contentType || "application/octet-stream",
     });
 
-    // 5️⃣ Pipe chunk to browser
+    // 5️⃣ Pipe the chunk to Chrome
     downloadResponse.data.pipe(res);
   } catch (err) {
     console.error("Streaming error:", err);
