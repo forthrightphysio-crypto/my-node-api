@@ -1,5 +1,10 @@
 const express = require("express");
-const admin = require("firebase-admin"); // ← only once
+const admin = require("firebase-admin"); // Firebase Admin
+const B2 = require("backblaze-b2"); // Backblaze B2
+const multer = require("multer"); // For handling file uploads
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -9,11 +14,68 @@ admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
   }),
 });
 
-console.log('Firebase initialized successfully!');
+console.log("Firebase initialized successfully!");
+
+// 🔹 Initialize Backblaze B2
+const b2 = new B2({
+  applicationKeyId: process.env.B2_KEY_ID,
+  applicationKey: process.env.B2_APP_KEY,
+});
+
+(async () => {
+  try {
+    await b2.authorize();
+    console.log("Backblaze B2 initialized successfully!");
+  } catch (error) {
+    console.error("❌ B2 initialization error:", error);
+  }
+})();
+
+// 🔹 Multer setup for file upload
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+// 🔹 Test route
+app.get("/", (req, res) => {
+  res.send("✅ FCM + B2 Server is running");
+});
+
+// 🔹 File upload route
+app.post("/upload", upload.single("file"), async (req, res) => {
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).send("No file uploaded");
+  }
+
+  try {
+    // 🔹 Get upload URL
+    const uploadUrlResponse = await b2.getUploadUrl({
+      bucketId: process.env.B2_BUCKET_ID,
+    });
+
+    // 🔹 Upload file
+    const uploadResponse = await b2.uploadFile({
+      uploadUrl: uploadUrlResponse.data.uploadUrl,
+      uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+      fileName: file.originalname,
+      data: file.buffer,
+    });
+
+    const fileUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${file.originalname}`;
+
+    console.log("✅ File uploaded:", file.originalname);
+    res.json({ message: "File uploaded successfully", url: fileUrl });
+  } catch (error) {
+    console.error("❌ B2 upload error:", error);
+    res.status(500).send("Error uploading file");
+  }
+});
+
 
 // 🔹 Test route
 app.get("/", (req, res) => {
@@ -229,46 +291,6 @@ app.post("/schedule-admins", async (req, res) => {
 });
 
 
-const axios = require("axios");
-
-app.get("/stream/:fileId", async (req, res) => {
-  try {
-    const fileId = req.params.fileId;
-    const range = req.headers.range;
-
-    if (!range) {
-      return res.status(416).send("Range header required");
-    }
-
-    const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-
-    const head = await axios.head(driveUrl);
-    const fileSize = head.headers["content-length"];
-
-    const CHUNK_SIZE = 10 ** 6; // 1MB
-    const start = Number(range.replace(/\D/g, ""));
-    const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
-    const chunkSize = end - start + 1;
-
-    res.writeHead(206, {
-      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Ranges": "bytes",
-      "Content-Type": "video/mp4",
-      "Content-Length": chunkSize
-    });
-
-    const response = await axios.get(driveUrl, {
-      responseType: "stream",
-      headers: { Range: `bytes=${start}-${end}` }
-    });
-
-    response.data.pipe(res);
-
-  } catch (err) {
-    console.error("Streaming error:", err);
-    res.status(500).send("Streaming failed");
-  }
-});
 
 
 // 🔹 Start server
