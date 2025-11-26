@@ -76,6 +76,46 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/video/:name", async (req, res) => {
+  const fileName = req.params.name;
+  const range = req.headers.range;
+
+  if (!range) {
+    return res.status(400).send("Requires Range header");
+  }
+
+  try {
+    await b2.authorize();
+
+    // 1. Get file info
+    const file = await b2.getFileInfo({ fileId: process.env[`FILEID_${fileName}`] });
+    const fileSize = file.data.contentLength;
+
+    // 2. Parse Range header
+    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks
+    const start = Number(range.replace(/\D/g, ""));
+    const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
+
+    // 3. Set streaming headers
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": end - start + 1,
+      "Content-Type": "video/mp4"
+    });
+
+    // 4. Stream from B2
+    const response = await b2.downloadFileById({
+      fileId: file.data.fileId,
+      range: `bytes=${start}-${end}`
+    });
+
+    response.data.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Streaming error");
+  }
+});
 
 
 // 🔹 Test route
