@@ -1,7 +1,9 @@
-const express = require("express");
-const admin = require("firebase-admin"); // ← only once
+import express from "express";
+import admin from "firebase-admin";
 import B2 from "backblaze-b2";
 import dotenv from "dotenv";
+import axios from "axios";
+import multer from "multer";
 dotenv.config();
 
 const b2 = new B2({
