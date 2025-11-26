@@ -76,6 +76,45 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/video/:name", async (req, res) => {
+  const fileName = req.params.name;
+  const range = req.headers.range;
+
+  if (!range) return res.status(400).send("Requires Range header");
+
+  try {
+    // 🔹 Get file info
+    const fileInfo = await b2.getFileInfo({ fileName, bucketId: process.env.B2_BUCKET_ID });
+    const fileSize = fileInfo.data.contentLength;
+
+    // 🔹 Parse range
+    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(startStr, 10);
+    const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+
+    const chunkSize = end - start + 1;
+
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": chunkSize,
+      "Content-Type": "video/mp4",
+    });
+
+    // 🔹 Download chunk and pipe to response
+    const downloadStream = await b2.downloadFileByName({
+      bucketName: process.env.B2_BUCKET_NAME,
+      fileName,
+      range: { start, end },
+    });
+
+    downloadStream.data.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error streaming video");
+  }
+});
+
 
 
 // 🔹 Send notification route
