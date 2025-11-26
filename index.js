@@ -1,12 +1,6 @@
 const express = require("express");
-const admin = require("firebase-admin");
-const B2 = require("backblaze-b2");
-const dotenv = require("dotenv");
-const multer = require("multer");
-const axios = require("axios");
-dotenv.config();
+const admin = require("firebase-admin"); // ← only once
 
-dotenv.config();
 
 const b2 = new B2({
   applicationKeyId: process.env.B2_KEY_ID,
@@ -245,54 +239,6 @@ app.post("/schedule-admins", async (req, res) => {
 
 
 
-
-app.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    await b2.authorize();
-
-    const bucketId = process.env.B2_BUCKET_ID;
-
-    // Get upload URL
-    const uploadData = await b2.getUploadUrl({ bucketId });
-
-    const fileBuffer = req.file.buffer;
-
-    // Upload file
-    const result = await b2.uploadFile({
-      uploadUrl: uploadData.data.uploadUrl,
-      uploadAuthToken: uploadData.data.authorizationToken,
-      fileName: req.file.originalname,
-      data: fileBuffer,
-    });
-
-    res.json({
-      status: "success",
-      fileName: req.file.originalname,
-      fileId: result.data.fileId,
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Upload failed" });
-  }
-});
-
-
-app.get("/file/:name", async (req, res) => {
-  try {
-    await b2.authorize();
-
-    const fileName = req.params.name;
-
-    const downloadUrl = `${b2.downloadUrl}/file/${process.env.B2_BUCKET_NAME}/${fileName}`;
-
-    res.redirect(downloadUrl);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error fetching file" });
-  }
-});
 
 
 
