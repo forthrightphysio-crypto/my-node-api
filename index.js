@@ -77,47 +77,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 });
 
 
-app.get("/video/:name", async (req, res) => {
-  const fileName = req.params.name;
-  const axios = require("axios");
-
-  try {
-    const downloadUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}`;
-    const range = req.headers.range;
-
-    if (range) {
-      // Stream with Range
-      const { data, headers } = await axios.get(downloadUrl, {
-        headers: { Range: range },
-        responseType: "stream",
-      });
-
-      res.writeHead(206, {
-        "Content-Range": headers["content-range"],
-        "Accept-Ranges": "bytes",
-        "Content-Length": headers["content-length"],
-        "Content-Type": "video/mp4",
-      });
-
-      data.pipe(res);
-    } else {
-      // No Range header → send full file
-      const { data, headers } = await axios.get(downloadUrl, {
-        responseType: "stream",
-      });
-
-      res.writeHead(200, {
-        "Content-Length": headers["content-length"],
-        "Content-Type": "video/mp4",
-      });
-
-      data.pipe(res);
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error streaming video");
-  }
-});
 
 // 🔹 Test route
 app.get("/", (req, res) => {
