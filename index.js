@@ -1,7 +1,10 @@
-const express = require("express");
-const admin = require("firebase-admin"); // ← only once
+import express from "express";
+import admin from "firebase-admin";
 import B2 from "backblaze-b2";
 import dotenv from "dotenv";
+import multer from "multer"; // if using multer
+import axios from "axios";
+
 dotenv.config();
 
 const b2 = new B2({
@@ -238,7 +241,7 @@ app.post("/schedule-admins", async (req, res) => {
 });
 
 
-const axios = require("axios");
+
 
 app.get("/stream/:fileId", async (req, res) => {
   try {
