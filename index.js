@@ -76,7 +76,33 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/play", async (req, res) => {
+  const fileName = req.query.file; // e.g. video.mp4
 
+  if (!fileName) {
+    return res.status(400).json({ error: "file query missing" });
+  }
+
+  try {
+    await b2.authorize();
+
+    const auth = await b2.getDownloadAuthorization({
+      bucketId: process.env.B2_BUCKET_ID,
+      fileNamePrefix: fileName,
+      validDurationInSeconds: 3600, // 1 hour
+    });
+
+    const signedUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}?Authorization=${auth.data.authorizationToken}`;
+
+    res.json({
+      signedUrl,
+      expiresIn: "3600 seconds",
+    });
+  } catch (err) {
+    console.error("❌ Signed URL error:", err);
+    res.status(500).json({ error: "Could not generate signed URL" });
+  }
+});
 
 
 // 🔹 Send notification route
