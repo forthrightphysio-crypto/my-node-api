@@ -76,30 +76,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-// 🔹 Route to serve private B2 video
-app.get("/video/:filename", async (req, res) => {
-  const { filename } = req.params;
-
-  if (!filename) return res.status(400).send("Missing filename");
-
-  try {
-    // 🔹 Generate a temporary download URL valid for 60 seconds
-    const downloadAuth = await b2.getDownloadAuthorization({
-      bucketId: process.env.B2_BUCKET_ID,
-      fileNamePrefix: filename,
-      validDurationInSeconds: 60, // URL valid for 60 seconds
-    });
-
-    // Construct the temporary URL
-    const tempUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${encodeURIComponent(filename)}?Authorization=${downloadAuth.data.authorizationToken}`;
-
-    // Return the temporary URL as JSON
-    res.json({ url: tempUrl });
-  } catch (error) {
-    console.error("❌ Error generating video URL:", error);
-    res.status(500).send("Error generating video URL");
-  }
-});
 
 // 🔹 Test route
 app.get("/", (req, res) => {
