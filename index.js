@@ -76,6 +76,28 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/video/:name", async (req, res) => {
+  const fileName = req.params.name;
+
+  try {
+    // Get file info to download
+    const fileInfo = await b2.getFileInfo({
+      fileId: "<fileId_for_" + fileName + ">",
+    });
+
+    // Download file from B2
+    const downloadResponse = await b2.downloadFileById({
+      fileId: fileInfo.data.fileId,
+    });
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.send(downloadResponse.data);
+  } catch (error) {
+    console.error("Error streaming video:", error);
+    res.status(500).send("Error streaming video");
+  }
+});
+
 
 // 🔹 Test route
 app.get("/", (req, res) => {
