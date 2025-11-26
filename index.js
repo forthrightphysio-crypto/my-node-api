@@ -76,6 +76,31 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/getFileUrl/:fileName", async (req, res) => {
+  const fileName = req.params.fileName;
+
+  try {
+    // Authorize B2
+    await b2.authorize();
+
+    // Generate download authorization token valid for 1 hour (3600 seconds)
+    const auth = await b2.getDownloadAuthorization({
+      bucketId: process.env.B2_BUCKET_ID,
+      fileNamePrefix: fileName,
+      validDurationInSeconds: 3600, 
+    });
+
+    const token = auth.data.authorizationToken;
+
+    // Build playable URL
+    const url = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
+
+    res.json({ url });
+  } catch (error) {
+    console.error("❌ Error generating token:", error);
+    res.status(500).send("Error generating secure URL");
+  }
+});
 
 
 // 🔹 Send notification route
