@@ -1,9 +1,8 @@
 const express = require("express");
-const admin = require("firebase-admin");
-const B2 = require("backblaze-b2");
-const multer = require("multer");
+const admin = require("firebase-admin"); // Firebase Admin
+const B2 = require("backblaze-b2"); // Backblaze B2
+const multer = require("multer"); // For handling file uploads
 const dotenv = require("dotenv");
-const axios = require('axios');
 
 dotenv.config();
 
@@ -38,12 +37,7 @@ const b2 = new B2({
 
 // 🔹 Multer setup for file upload
 const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage,
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 500MB limit
-  }
-});
+const upload = multer({ storage });
 
 // 🔹 Test route
 app.get("/", (req, res) => {
@@ -75,126 +69,19 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     const fileUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${file.originalname}`;
 
     console.log("✅ File uploaded:", file.originalname);
-    res.json({ 
-      message: "File uploaded successfully", 
-      url: fileUrl,
-      fileName: file.originalname
-    });
+    res.json({ message: "File uploaded successfully", url: fileUrl });
   } catch (error) {
     console.error("❌ B2 upload error:", error);
     res.status(500).send("Error uploading file");
   }
 });
 
-// 🔹 Stream video/audio route
-app.get("/stream/:fileName", async (req, res) => {
-  const { fileName } = req.params;
-  const range = req.headers.range;
 
-  if (!fileName) {
-    return res.status(400).send("File name is required");
-  }
 
-  try {
-    // 🔹 Get download authorization
-    const downloadAuth = await b2.getDownloadAuthorization({
-      bucketId: process.env.B2_BUCKET_ID,
-      fileNamePrefix: fileName,
-      validDurationInSeconds: 3600, // 1 hour
-    });
-
-    // 🔹 Construct the download URL with authorization
-    const downloadUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}?Authorization=${downloadAuth.data.authorizationToken}`;
-
-    // 🔹 Get file info to determine size
-    const headResponse = await axios.head(downloadUrl);
-    const fileSize = parseInt(headResponse.headers['content-length']);
-
-    if (range) {
-      // 🔹 Handle range requests for seeking
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = (end - start) + 1;
-
-      // 🔹 Set headers for partial content
-      res.writeHead(206, {
-        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-        "Accept-Ranges": "bytes",
-        "Content-Length": chunksize,
-        "Content-Type": getContentType(fileName),
-        "Cache-Control": "no-cache"
-      });
-
-      // 🔹 Stream only the requested range
-      const response = await axios.get(downloadUrl, {
-        headers: { Range: `bytes=${start}-${end}` },
-        responseType: "stream"
-      });
-
-      response.data.pipe(res);
-    } else {
-      // 🔹 Stream entire file
-      res.writeHead(200, {
-        "Content-Length": fileSize,
-        "Content-Type": getContentType(fileName),
-        "Cache-Control": "no-cache"
-      });
-
-      const response = await axios.get(downloadUrl, { responseType: "stream" });
-      response.data.pipe(res);
-    }
-
-  } catch (error) {
-    console.error("❌ Streaming error:", error);
-    
-    if (error.response?.status === 404) {
-      return res.status(404).send("File not found");
-    }
-    
-    res.status(500).send("Error streaming file");
-  }
+// 🔹 Test route
+app.get("/", (req, res) => {
+  res.send("✅ FCM Server is running");
 });
-
-// 🔹 Get file list (for testing)
-app.get("/files", async (req, res) => {
-  try {
-    const response = await b2.listFileNames({
-      bucketId: process.env.B2_BUCKET_ID,
-      maxFileCount: 100
-    });
-
-    const files = response.data.files.map(file => ({
-      name: file.fileName,
-      size: file.contentLength,
-      uploadTimestamp: file.uploadTimestamp
-    }));
-
-    res.json(files);
-  } catch (error) {
-    console.error("❌ Error fetching files:", error);
-    res.status(500).send("Error fetching files");
-  }
-});
-
-// 🔹 Helper function to determine content type
-function getContentType(fileName) {
-  const ext = fileName.split('.').pop().toLowerCase();
-  const contentTypes = {
-    mp4: 'video/mp4',
-    mkv: 'video/x-matroska',
-    avi: 'video/x-msvideo',
-    mov: 'video/quicktime',
-    webm: 'video/webm',
-    mp3: 'audio/mpeg',
-    wav: 'audio/wav',
-    ogg: 'audio/ogg',
-    m4a: 'audio/mp4',
-    flac: 'audio/flac'
-  };
-  
-  return contentTypes[ext] || 'application/octet-stream';
-}
 
 // 🔹 Send notification route
 app.post("/send", async (req, res) => {
@@ -249,6 +136,7 @@ app.post("/schedule", async (req, res) => {
         await admin.messaging().send(message);
         console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
       } catch (error) {
+        // ✅ Handle invalid token
         if (error.code === 'messaging/registration-token-not-registered') {
           console.log("❌ Token is invalid, removing from Firestore:", token);
           try {
@@ -270,6 +158,7 @@ app.post("/schedule", async (req, res) => {
   }
 });
 
+// 🔹 Send notification to all admins
 // 🔹 Fetch all admin tokens
 app.get("/adminTokens", async (req, res) => {
   try {
@@ -279,14 +168,15 @@ app.get("/adminTokens", async (req, res) => {
       return res.status(200).json({ tokens: [], message: "No admin tokens found" });
     }
 
+    // Collect document IDs (the tokens)
     const tokens = snapshot.docs.map(doc => doc.id);
+
     res.status(200).json({ tokens });
   } catch (error) {
     console.error("❌ Error fetching admin tokens:", error);
     res.status(500).json({ error: "Error fetching admin tokens" });
   }
 });
-
 // 🔹 Send notification to all admins
 app.post("/notify-admins", async (req, res) => {
   const { title, body } = req.body;
@@ -305,6 +195,7 @@ app.post("/notify-admins", async (req, res) => {
         return { token, success: true };
       } catch (err) {
         console.error(`❌ Failed token ${token}:`, err.message);
+        // Remove invalid token
         if (err.code === 'messaging/registration-token-not-registered') {
           await admin.firestore().collection('adminTokens').doc(token).delete();
           console.log(`🗑 Token removed: ${token}`);
@@ -322,15 +213,19 @@ app.post("/notify-admins", async (req, res) => {
   }
 });
 
+
 // 🔹 Schedule notification for ALL admins
 app.post("/schedule-admins", async (req, res) => {
   const { title, body, date, time } = req.body;
 
   if (!title || !body || !date || !time) {
-    return res.status(400).send("Missing required fields: title, body, date, or time");
+    return res
+      .status(400)
+      .send("Missing required fields: title, body, date, or time");
   }
 
   try {
+    // 🔹 Get all admin tokens
     const snapshot = await admin.firestore().collection("adminTokens").get();
     const tokens = snapshot.docs.map((doc) => doc.id).filter(Boolean);
 
@@ -338,10 +233,13 @@ app.post("/schedule-admins", async (req, res) => {
       return res.status(200).send("No admin tokens available");
     }
 
+    // 🔹 Convert input date & time (IST)
     const scheduleDateTimeIST = new Date(`${date}T${time}:00+05:30`);
     const now = new Date();
+
     const delay = scheduleDateTimeIST.getTime() - now.getTime();
 
+    // 🔹 Format both times in IST for clean logging
     const nowIST = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
     const scheduleIST = scheduleDateTimeIST.toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
@@ -355,6 +253,7 @@ app.post("/schedule-admins", async (req, res) => {
       return res.status(400).send("Scheduled time must be in the future");
     }
 
+    // 🔹 Schedule sending
     setTimeout(async () => {
       const sendTimeIST = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
       console.log(`📢 Sending scheduled admin notifications at ${sendTimeIST}`);
@@ -382,13 +281,20 @@ app.post("/schedule-admins", async (req, res) => {
       console.log(`✅ Sent to ${successCount}/${tokens.length} admins`);
     }, delay);
 
-    res.send(`🕒 Notification scheduled for ${scheduleIST} (IST) to ${tokens.length} admins`);
+    // 🔹 Send response in IST
+    res.send(
+      `🕒 Notification scheduled for ${scheduleIST} (IST) to ${tokens.length} admins`
+    );
   } catch (error) {
     console.error("❌ Error scheduling admin notifications:", error);
     res.status(500).send("Error scheduling admin notifications");
   }
 });
 
+
+
+
 // 🔹 Start server
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+
