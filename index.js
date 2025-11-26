@@ -93,7 +93,7 @@ app.get("/getFileUrl/:fileName", async (req, res) => {
     const token = auth.data.authorizationToken;
 
     // Build playable URL
-    const url = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}?Authorization=${token}`;
+    const url = `https://f000.backblazeb2.com/file/forthright-datauplod/${fileName}?Authorization=${token}`;
 
     res.json({ url });
   } catch (error) {
