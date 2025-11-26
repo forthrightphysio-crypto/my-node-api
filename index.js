@@ -76,34 +76,47 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-app.get("/play", async (req, res) => {
-  const fileName = req.query.file; // e.g. video.mp4
-
-  if (!fileName) {
-    return res.status(400).json({ error: "file query missing" });
-  }
-
+// 🔹 Get all files with signed URLs
+app.get("/all-files-signed", async (req, res) => {
   try {
-    await b2.authorize();
+    await b2.authorize(); // Make sure B2 is authorized
 
-    const auth = await b2.getDownloadAuthorization({
-      bucketId: process.env.B2_BUCKET_ID,
-      fileNamePrefix: fileName,
-      validDurationInSeconds: 3600, // 1 hour
-    });
+    const allFiles = [];
+    let nextFileName = undefined;
 
-    const signedUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${fileName}?Authorization=${auth.data.authorizationToken}`;
+    do {
+      const response = await b2.listFileNames({
+        bucketId: process.env.B2_BUCKET_ID,
+        startFileName: nextFileName,
+        maxFileCount: 100,
+      });
 
-    res.json({
-      signedUrl,
-      expiresIn: "3600 seconds",
-    });
-  } catch (err) {
-    console.error("❌ Signed URL error:", err);
-    res.status(500).json({ error: "Could not generate signed URL" });
+      for (const file of response.data.files) {
+        // Generate signed URL valid for 1 hour (3600 seconds)
+        const auth = await b2.getDownloadAuthorization({
+          bucketId: process.env.B2_BUCKET_ID,
+          fileNamePrefix: file.fileName,
+          validDurationInSeconds: 3600,
+        });
+
+        const signedUrl = `https://f000.backblazeb2.com/file/${process.env.B2_BUCKET_NAME}/${file.fileName}?Authorization=${auth.data.authorizationToken}`;
+
+        allFiles.push({
+          fileName: file.fileName,
+          signedUrl,
+          expiresIn: "3600 seconds",
+        });
+      }
+
+      nextFileName = response.data.nextFileName;
+    } while (nextFileName);
+
+    res.json({ files: allFiles });
+  } catch (error) {
+    console.error("❌ Error fetching signed URLs:", error);
+    res.status(500).json({ error: "Could not fetch signed URLs" });
   }
 });
-
 
 // 🔹 Send notification route
 app.post("/send", async (req, res) => {
