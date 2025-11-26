@@ -1,13 +1,6 @@
 const express = require("express");
 const admin = require("firebase-admin"); // ← only once
 
-
-const b2 = new B2({
-  applicationKeyId: process.env.B2_KEY_ID,
-  applicationKey: process.env.B2_APP_KEY,
-});
-
-
 const app = express();
 app.use(express.json());
 
@@ -236,11 +229,46 @@ app.post("/schedule-admins", async (req, res) => {
 });
 
 
+const axios = require("axios");
 
+app.get("/stream/:fileId", async (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    const range = req.headers.range;
 
+    if (!range) {
+      return res.status(416).send("Range header required");
+    }
 
+    const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
 
+    const head = await axios.head(driveUrl);
+    const fileSize = head.headers["content-length"];
 
+    const CHUNK_SIZE = 10 ** 6; // 1MB
+    const start = Number(range.replace(/\D/g, ""));
+    const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
+    const chunkSize = end - start + 1;
+
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Type": "video/mp4",
+      "Content-Length": chunkSize
+    });
+
+    const response = await axios.get(driveUrl, {
+      responseType: "stream",
+      headers: { Range: `bytes=${start}-${end}` }
+    });
+
+    response.data.pipe(res);
+
+  } catch (err) {
+    console.error("Streaming error:", err);
+    res.status(500).send("Streaming failed");
+  }
+});
 
 
 // 🔹 Start server
