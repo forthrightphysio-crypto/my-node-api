@@ -1,15 +1,14 @@
-import express from "express";
-import admin from "firebase-admin";
+const express = require("express");
+const admin = require("firebase-admin"); // ← only once
 import B2 from "backblaze-b2";
 import dotenv from "dotenv";
-import axios from "axios";
-
 dotenv.config();
 
 const b2 = new B2({
   applicationKeyId: process.env.B2_KEY_ID,
   applicationKey: process.env.B2_APP_KEY,
 });
+
 
 const app = express();
 app.use(express.json());
@@ -19,7 +18,7 @@ admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   }),
 });
 
@@ -124,7 +123,6 @@ app.get("/adminTokens", async (req, res) => {
     res.status(500).json({ error: "Error fetching admin tokens" });
   }
 });
-
 // 🔹 Send notification to all admins
 app.post("/notify-admins", async (req, res) => {
   const { title, body } = req.body;
@@ -153,13 +151,14 @@ app.post("/notify-admins", async (req, res) => {
     }));
 
     const successCount = results.filter(r => r.success).length;
-    res.send(`✅ Notifications sent to ${successCount}/${tokens.length} admins");
+    res.send(`✅ Notifications sent to ${successCount}/${tokens.length} admins`);
 
   } catch (error) {
     console.error("❌ Error sending admin notifications:", error);
     res.status(500).json({ message: "Error sending notifications", error: error.message });
   }
 });
+
 
 // 🔹 Schedule notification for ALL admins
 app.post("/schedule-admins", async (req, res) => {
@@ -238,48 +237,63 @@ app.post("/schedule-admins", async (req, res) => {
   }
 });
 
-app.get("/stream/:fileId", async (req, res) => {
+
+
+
+
+
+app.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    const fileId = req.params.fileId;
-    const range = req.headers.range;
+    await b2.authorize();
 
-    if (!range) {
-      return res.status(416).send("Range header required");
-    }
+    const bucketId = process.env.B2_BUCKET_ID;
 
-    const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    // Get upload URL
+    const uploadData = await b2.getUploadUrl({ bucketId });
 
-    const head = await axios.head(driveUrl);
-    const fileSize = head.headers["content-length"];
+    const fileBuffer = req.file.buffer;
 
-    const CHUNK_SIZE = 10 ** 6; // 1MB
-    const start = Number(range.replace(/\D/g, ""));
-    const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
-    const chunkSize = end - start + 1;
-
-    res.writeHead(206, {
-      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Ranges": "bytes",
-      "Content-Type": "video/mp4",
-      "Content-Length": chunkSize
+    // Upload file
+    const result = await b2.uploadFile({
+      uploadUrl: uploadData.data.uploadUrl,
+      uploadAuthToken: uploadData.data.authorizationToken,
+      fileName: req.file.originalname,
+      data: fileBuffer,
     });
 
-    const response = await axios.get(driveUrl, {
-      responseType: "stream",
-      headers: { Range: `bytes=${start}-${end}` }
+    res.json({
+      status: "success",
+      fileName: req.file.originalname,
+      fileId: result.data.fileId,
     });
-
-    response.data.pipe(res);
 
   } catch (err) {
-    console.error("Streaming error:", err);
-    res.status(500).send("Streaming failed");
+    console.error(err);
+    res.status(500).json({ error: "Upload failed" });
   }
 });
 
-// Note: The upload route references 'upload' middleware but it's not defined
-// You'll need to import and configure multer or similar for file uploads
+
+app.get("/file/:name", async (req, res) => {
+  try {
+    await b2.authorize();
+
+    const fileName = req.params.name;
+
+    const downloadUrl = `${b2.downloadUrl}/file/${process.env.B2_BUCKET_NAME}/${fileName}`;
+
+    res.redirect(downloadUrl);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error fetching file" });
+  }
+});
+
+
+
 
 // 🔹 Start server
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+
