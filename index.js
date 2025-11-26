@@ -83,29 +83,26 @@ app.get("/video/:name", async (req, res) => {
   try {
     await b2.authorize();
 
-    // 1. Get file info by fileId from env
     const fileId = process.env[`FILEID_${fileName}`];
-    if (!fileId) {
-      return res.status(404).send("FileId not found in env");
-    }
+    if (!fileId) return res.status(404).send("FileId not found in env");
 
     const file = await b2.getFileInfo({ fileId });
     const fileSize = file.data.contentLength;
 
-    // ---- CASE 1: Chrome FIRST REQUEST (no Range header) ----
+    // ---- CASE 1: Chrome first request (NO range) ----
     if (!range) {
       res.writeHead(200, {
         "Content-Length": fileSize,
         "Accept-Ranges": "bytes",
         "Content-Type": "video/mp4",
       });
-      return res.end(); // Chrome will send a second request with Range
+      return res.end();
     }
 
-    // ---- CASE 2: Chrome SECOND REQUEST (with Range header) ----
-    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
-    const start = Number(range.replace(/\D/g, ""));
-    const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
+    // ---- CASE 2: Chrome second request (WITH range) ----
+    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(startStr, 10);
+    const end = endStr ? parseInt(endStr, 10) : Math.min(start + 1024 * 1024, fileSize - 1);
 
     res.writeHead(206, {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -128,10 +125,6 @@ app.get("/video/:name", async (req, res) => {
 });
 
 
-// 🔹 Test route
-app.get("/", (req, res) => {
-  res.send("✅ FCM Server is running");
-});
 
 // 🔹 Send notification route
 app.post("/send", async (req, res) => {
