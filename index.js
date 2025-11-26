@@ -76,54 +76,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-app.get("/video/:name", async (req, res) => {
-  const fileName = req.params.name;
-  const range = req.headers.range;
-
-  try {
-    await b2.authorize();
-
-    const fileId = process.env[`FILEID_${fileName}`];
-    if (!fileId) return res.status(404).send("FileId not found in env");
-
-    const file = await b2.getFileInfo({ fileId });
-    const fileSize = file.data.contentLength;
-
-    // ---- CASE 1: Chrome first request (NO range) ----
-    if (!range) {
-      res.writeHead(200, {
-        "Content-Length": fileSize,
-        "Accept-Ranges": "bytes",
-        "Content-Type": "video/mp4",
-      });
-      return res.end();
-    }
-
-    // ---- CASE 2: Chrome second request (WITH range) ----
-    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(startStr, 10);
-    const end = endStr ? parseInt(endStr, 10) : Math.min(start + 1024 * 1024, fileSize - 1);
-
-    res.writeHead(206, {
-      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Ranges": "bytes",
-      "Content-Length": end - start + 1,
-      "Content-Type": "video/mp4",
-    });
-
-    const response = await b2.downloadFileById({
-      fileId,
-      range: `bytes=${start}-${end}`,
-    });
-
-    response.data.pipe(res);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Streaming error");
-  }
-});
-
 
 
 // 🔹 Send notification route
