@@ -76,6 +76,60 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.get("/play/:filename", async (req, res) => {
+  const fileName = req.params.filename;
+
+  try {
+    // 1️⃣ Get file info from B2
+    const fileList = await b2.listFileNames({
+      bucketId: process.env.B2_BUCKET_ID,
+      startFileName: fileName,
+      maxFileCount: 1,
+    });
+
+    if (!fileList.data.files.length) {
+      return res.status(404).send("File not found");
+    }
+
+    const fileInfo = fileList.data.files[0];
+    const fileId = fileInfo.fileId;
+    const fileSize = fileInfo.contentLength;
+
+    // 2️⃣ Range header for streaming
+    const range = req.headers.range;
+    if (!range) {
+      // Chrome will try to load the entire file if no range
+      // For large files, we can send first chunk or force range
+      return res.status(416).send("Range header required for streaming");
+    }
+
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+    const chunkSize = end - start + 1;
+
+    // 3️⃣ Download only required chunk from B2
+    const downloadResponse = await b2.downloadFileById({
+      fileId,
+      range: `bytes=${start}-${end}`,
+    });
+
+    // 4️⃣ Set headers Chrome expects
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": chunkSize,
+      "Content-Type": fileInfo.contentType || "application/octet-stream",
+    });
+
+    // 5️⃣ Pipe chunk to browser
+    downloadResponse.data.pipe(res);
+  } catch (err) {
+    console.error("Streaming error:", err);
+    res.status(500).send("Error streaming file");
+  }
+});
 
 
 // 🔹 Test route
