@@ -1,9 +1,11 @@
-import express from "express";
-import admin from "firebase-admin";
-import B2 from "backblaze-b2";
-import dotenv from "dotenv";
-import axios from "axios";
-import multer from "multer";
+const express = require("express");
+const admin = require("firebase-admin");
+const B2 = require("backblaze-b2");
+const dotenv = require("dotenv");
+const multer = require("multer");
+const axios = require("axios");
+dotenv.config();
+
 dotenv.config();
 
 const b2 = new B2({
