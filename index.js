@@ -78,29 +78,33 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
 app.get("/video/:name", async (req, res) => {
   const fileName = req.params.name;
+
   try {
-    // Get file info
-    const fileInfo = await b2.getFileInfo({
-      fileName,
+    // 🔹 List files in the bucket to get fileId
+    const listResponse = await b2.listFileNames({
       bucketId: process.env.B2_BUCKET_ID,
+      startFileName: fileName,
+      maxFileCount: 1,
     });
 
-    const fileSize = fileInfo.data.contentLength;
-    const range = req.headers.range;
-
-    if (!range) {
-      return res.status(400).send("Requires Range header");
+    if (!listResponse.data.files || listResponse.data.files.length === 0) {
+      return res.status(404).send("File not found");
     }
+
+    const fileId = listResponse.data.files[0].fileId;
+    const fileSize = parseInt(listResponse.data.files[0].contentLength, 10);
+
+    const range = req.headers.range;
+    if (!range) return res.status(400).send("Requires Range header");
 
     const parts = range.replace(/bytes=/, "").split("-");
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
     const chunkSize = end - start + 1;
 
-    // Download only the requested range from B2
+    // 🔹 Download only the requested chunk
     const downloadResponse = await b2.downloadFileById({
-      fileId: fileInfo.data.fileId,
+      fileId,
       range: `bytes=${start}-${end}`,
     });
 
