@@ -3,6 +3,7 @@ const admin = require("firebase-admin"); // Firebase Admin
 const B2 = require("backblaze-b2"); // Backblaze B2
 const multer = require("multer"); // For handling file uploads
 const dotenv = require("dotenv");
+const { google } = require("googleapis");
 
 dotenv.config();
 
@@ -18,8 +19,63 @@ admin.initializeApp({
   }),
 });
 
+// 🔹 Google Calendar API Setup for Meet Link Generation
+const calendarAuth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+  },
+  scopes: ["https://www.googleapis.com/auth/calendar"],
+});
+
+const calendar = google.calendar({ version: "v3", auth: calendarAuth });
+
 console.log("Firebase initialized successfully!");
 
+// 🔹 Create Google Meet link
+app.post("/create-meet", async (req, res) => {
+  const { summary, date, startTime, endTime } = req.body;
+
+  if (!summary || !date || !startTime || !endTime) {
+    return res.status(400).send("Missing summary, date, startTime, endTime");
+  }
+
+  try {
+    // Format times in IST timezone
+    const startDateTime = `${date}T${startTime}:00+05:30`;
+    const endDateTime = `${date}T${endTime}:00+05:30`;
+
+    const event = {
+      summary,
+      start: { dateTime: startDateTime },
+      end: { dateTime: endDateTime },
+
+      // 🔹 Create Google Meet link
+      conferenceData: {
+        createRequest: {
+          requestId: "meet-" + Date.now(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    };
+
+    // Insert event
+    const response = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event,
+      conferenceDataVersion: 1,
+    });
+
+    return res.status(200).json({
+      message: "Meet link generated successfully",
+      meetLink: response.data.hangoutLink,
+      eventId: response.data.id,
+    });
+  } catch (error) {
+    console.error("❌ Google Meet Error:", error);
+    return res.status(500).send("Error generating meet link");
+  }
+});
 
 
 
@@ -92,8 +148,7 @@ app.post("/schedule", async (req, res) => {
     }, delay);
 
     res.send(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-  } catch (error) {
-    console.error("❌ Scheduling error:", error);
+  } catch (error) { console.error("❌ Scheduling error:", error);
     res.status(500).send("Error scheduling notification");
   }
 });
