@@ -22,49 +22,6 @@ admin.initializeApp({
 console.log("Firebase initialized successfully!");
 
 
-
-const oAuth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
-
-// Use refresh token to get access token automatically
-oAuth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-
-const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
-
-app.post("/create-meet", async (req, res) => {
-  const { title, startDateTime, endDateTime } = req.body;
-
-  if (!title || !startDateTime || !endDateTime) {
-    return res.status(400).send("Missing fields: title, startDateTime, endDateTime");
-  }
-
-  try {
-    const event = {
-      summary: title,
-      start: { dateTime: new Date(startDateTime).toISOString() },
-      end: { dateTime: new Date(endDateTime).toISOString() },
-      conferenceData: { createRequest: { requestId: `${Date.now()}` } },
-    };
-
-    const response = await calendar.events.insert({
-      calendarId: "primary",
-      resource: event,
-      conferenceDataVersion: 1,
-    });
-
-    const meetLink = response.data.conferenceData?.entryPoints?.[0]?.uri || null;
-
-    res.json({ success: true, meetLink });
-  } catch (error) {
-    console.error("❌ Error creating Meet:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-
 // 🔹 Send notification route
 app.post("/send", async (req, res) => {
   const { token, title, body } = req.body;
