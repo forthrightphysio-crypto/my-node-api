@@ -46,18 +46,18 @@ app.post("/create-meet", async (req, res) => {
     const endDateTime = `${date}T${endTime}:00+05:30`;
 
     const event = {
-      summary,
-      start: { dateTime: startDateTime },
-      end: { dateTime: endDateTime },
+  summary,
+  start: { dateTime: startDateTime },
+  end: { dateTime: endDateTime },
 
-      // 🔹 Create Google Meet link
-      conferenceData: {
-        createRequest: {
-          requestId: "meet-" + Date.now(),
-          conferenceSolutionKey: { type: "hangoutsMeet" },
-        },
-      },
-    };
+  conferenceData: {
+    createRequest: {
+      requestId: "meet-" + Date.now(),
+      conferenceSolutionKey: { type: "meet" },   // ✅ FIX HERE
+    },
+  },
+};
+
 
     // Insert event
     const response = await calendar.events.insert({
