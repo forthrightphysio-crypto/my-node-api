@@ -63,7 +63,7 @@ app.post("/create-meet", async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-4️⃣ Exampl
+
 
 // 🔹 Send notification route
 app.post("/send", async (req, res) => {
