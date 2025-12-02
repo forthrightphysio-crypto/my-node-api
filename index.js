@@ -1,7 +1,7 @@
-const express = require("express");
-const admin = require("firebase-admin"); // Firebase Admin
-
-
+const express = require('express');
+const { google } = require('googleapis');
+const admin = require('firebase-admin');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
@@ -13,28 +13,90 @@ admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   }),
 });
 
 console.log("Firebase initialized successfully!");
 
+// 🔹 Google OAuth2 setup
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID';
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET';
+const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/oauth2callback';
 
-// 🔹 Send notification route
+const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+let calendar; // Will hold authenticated calendar
+
+// 🔹 Step 1: Redirect user to Google auth URL
+app.get('/auth', (req, res) => {
+  const url = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+    ],
+  });
+  res.redirect(url);
+});
+
+// 🔹 Step 2: Handle OAuth2 callback
+app.get('/oauth2callback', async (req, res) => {
+  const { code } = req.query;
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+
+    // Initialize Calendar API with authenticated client
+    calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    res.send('✅ Google Calendar authentication successful! You can now POST /create-meet');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('❌ Authentication failed');
+  }
+});
+
+// 🔹 Step 3: API to create Google Meet
+app.post('/create-meet', async (req, res) => {
+  try {
+    if (!calendar) return res.status(400).send('Authenticate first via /auth');
+
+    const { title, startTime, endTime } = req.body;
+
+    const event = {
+      summary: title || 'Scheduled Meeting',
+      start: { dateTime: startTime, timeZone: 'Asia/Kolkata' },
+      end: { dateTime: endTime, timeZone: 'Asia/Kolkata' },
+      conferenceData: {
+        createRequest: {
+          requestId: `meet-${Date.now()}`,
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      },
+    };
+
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      conferenceDataVersion: 1,
+    });
+
+    const meetLink = response.data.conferenceData.entryPoints[0].uri;
+    res.json({ meetLink });
+  } catch (err) {
+    console.error(err.response?.data || err);
+    res.status(500).json({ error: 'Failed to create meeting' });
+  }
+});
+
+// 🔹 Firebase Notification routes
+
+// Send notification
 app.post("/send", async (req, res) => {
   const { token, title, body } = req.body;
-
-  if (!token || !title || !body) {
-    return res.status(400).send("Missing fields");
-  }
-
-  const message = {
-    notification: { title, body },
-    token,
-  };
+  if (!token || !title || !body) return res.status(400).send("Missing fields");
 
   try {
-    await admin.messaging().send(message);
+    await admin.messaging().send({ notification: { title, body }, token });
     res.send("✅ Notification sent successfully!");
   } catch (error) {
     console.error("❌ Error sending message:", error);
@@ -42,78 +104,46 @@ app.post("/send", async (req, res) => {
   }
 });
 
-// 🔹 Schedule notification route
+// Schedule notification
 app.post("/schedule", async (req, res) => {
   const { token, title, body, date, time } = req.body;
-
-  if (!token || !title || !body || !date || !time) {
-    return res.status(400).send("Missing required fields");
-  }
+  if (!token || !title || !body || !date || !time) return res.status(400).send("Missing required fields");
 
   try {
     const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
-    const now = new Date();
-    const delay = scheduleDateTime - now;
+    const delay = scheduleDateTime - new Date();
 
-    console.log(`🕒 Now: ${now.toLocaleString()}`);
-    console.log(`🕒 Schedule Time (IST): ${scheduleDateTime.toLocaleString()}`);
-    console.log(`⏳ Delay: ${delay / 1000} seconds`);
-
-    if (delay <= 0) {
-      return res.status(400).send("Scheduled time must be in the future");
-    }
-
-    console.log(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-    console.log(`📦 Details → Title: "${title}", Body: "${body}", Token: ${token.substring(0, 10)}...`);
+    if (delay <= 0) return res.status(400).send("Scheduled time must be in the future");
 
     setTimeout(async () => {
-      const message = { notification: { title, body }, token };
-
       try {
-        await admin.messaging().send(message);
-        console.log(`✅ Notification SENT successfully at ${new Date().toLocaleString()}`);
+        await admin.messaging().send({ notification: { title, body }, token });
+        console.log(`✅ Notification sent to ${token}`);
       } catch (error) {
-        // ✅ Handle invalid token
-        if (error.code === 'messaging/registration-token-not-registered') {
-          console.log("❌ Token is invalid, removing from Firestore:", token);
-          try {
-            await admin.firestore().collection('adminTokens').doc(token).delete();
-            console.log("🗑 Token removed successfully.");
-          } catch (deleteError) {
-            console.error("❌ Failed to remove token from Firestore:", deleteError);
-          }
-        } else {
-          console.error("❌ Error sending scheduled notification:", error);
-        }
+        console.error("❌ Error sending scheduled notification:", error);
       }
     }, delay);
 
     res.send(`🕒 Notification scheduled for ${scheduleDateTime.toLocaleString()}`);
-  } catch (error) { console.error("❌ Scheduling error:", error);
+  } catch (error) {
+    console.error("❌ Scheduling error:", error);
     res.status(500).send("Error scheduling notification");
   }
 });
 
-// 🔹 Send notification to all admins
-// 🔹 Fetch all admin tokens
+// Get all admin tokens
 app.get("/adminTokens", async (req, res) => {
   try {
     const snapshot = await admin.firestore().collection("adminTokens").get();
-
-    if (snapshot.empty) {
-      return res.status(200).json({ tokens: [], message: "No admin tokens found" });
-    }
-
-    // Collect document IDs (the tokens)
     const tokens = snapshot.docs.map(doc => doc.id);
-
     res.status(200).json({ tokens });
   } catch (error) {
-    console.error("❌ Error fetching admin tokens:", error);
+    console.error(error);
     res.status(500).json({ error: "Error fetching admin tokens" });
   }
 });
-// 🔹 Send notification to all admins
+
+// Notify all admins immediately
 app.post("/notify-admins", async (req, res) => {
   const { title, body } = req.body;
   if (!title || !body) return res.status(400).send("Missing title or body");
@@ -123,114 +153,60 @@ app.post("/notify-admins", async (req, res) => {
     const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
     if (!tokens.length) return res.status(200).send("No admin tokens available");
 
-    console.log("Tokens to send:", tokens);
-
-    const results = await Promise.all(tokens.map(async (token) => {
+    await Promise.all(tokens.map(async (token) => {
       try {
         await admin.messaging().send({ notification: { title, body }, token });
-        return { token, success: true };
       } catch (err) {
-        console.error(`❌ Failed token ${token}:`, err.message);
-        // Remove invalid token
         if (err.code === 'messaging/registration-token-not-registered') {
           await admin.firestore().collection('adminTokens').doc(token).delete();
-          console.log(`🗑 Token removed: ${token}`);
         }
-        return { token, success: false, error: err.message };
       }
     }));
 
-    const successCount = results.filter(r => r.success).length;
-    res.send(`✅ Notifications sent to ${successCount}/${tokens.length} admins`);
-
+    res.send(`✅ Notifications sent to ${tokens.length} admins`);
   } catch (error) {
-    console.error("❌ Error sending admin notifications:", error);
-    res.status(500).json({ message: "Error sending notifications", error: error.message });
+    console.error(error);
+    res.status(500).send("Error sending notifications");
   }
 });
 
-
-// 🔹 Schedule notification for ALL admins
+// Schedule notifications for all admins
 app.post("/schedule-admins", async (req, res) => {
   const { title, body, date, time } = req.body;
-
-  if (!title || !body || !date || !time) {
-    return res
-      .status(400)
-      .send("Missing required fields: title, body, date, or time");
-  }
+  if (!title || !body || !date || !time) return res.status(400).send("Missing required fields");
 
   try {
-    // 🔹 Get all admin tokens
     const snapshot = await admin.firestore().collection("adminTokens").get();
-    const tokens = snapshot.docs.map((doc) => doc.id).filter(Boolean);
+    const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
+    if (!tokens.length) return res.status(200).send("No admin tokens available");
 
-    if (!tokens.length) {
-      return res.status(200).send("No admin tokens available");
-    }
+    const scheduleDateTime = new Date(`${date}T${time}:00+05:30`);
+    const delay = scheduleDateTime - new Date();
+    if (delay <= 0) return res.status(400).send("Scheduled time must be in the future");
 
-    // 🔹 Convert input date & time (IST)
-    const scheduleDateTimeIST = new Date(`${date}T${time}:00+05:30`);
-    const now = new Date();
-
-    const delay = scheduleDateTimeIST.getTime() - now.getTime();
-
-    // 🔹 Format both times in IST for clean logging
-    const nowIST = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-    const scheduleIST = scheduleDateTimeIST.toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-    });
-
-    console.log(`🕒 Now (IST): ${nowIST}`);
-    console.log(`🕒 Scheduled Time (IST): ${scheduleIST}`);
-    console.log(`⏳ Delay: ${(delay / 1000).toFixed(2)} seconds for ${tokens.length} admins`);
-
-    if (delay <= 0) {
-      return res.status(400).send("Scheduled time must be in the future");
-    }
-
-    // 🔹 Schedule sending
     setTimeout(async () => {
-      const sendTimeIST = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-      console.log(`📢 Sending scheduled admin notifications at ${sendTimeIST}`);
-
-      const results = await Promise.all(
-        tokens.map(async (token) => {
-          try {
-            await admin.messaging().send({
-              notification: { title, body },
-              token,
-            });
-            return { token, success: true };
-          } catch (err) {
-            console.error(`❌ Failed token ${token}:`, err.code);
-            if (err.code === "messaging/registration-token-not-registered") {
-              await admin.firestore().collection("adminTokens").doc(token).delete();
-              console.log(`🗑 Removed invalid token: ${token}`);
-            }
-            return { token, success: false };
+      await Promise.all(tokens.map(async (token) => {
+        try {
+          await admin.messaging().send({ notification: { title, body }, token });
+        } catch (err) {
+          if (err.code === 'messaging/registration-token-not-registered') {
+            await admin.firestore().collection('adminTokens').doc(token).delete();
           }
-        })
-      );
-
-      const successCount = results.filter((r) => r.success).length;
-      console.log(`✅ Sent to ${successCount}/${tokens.length} admins`);
+        }
+      }));
+      console.log(`✅ Scheduled notifications sent at ${new Date().toLocaleString()}`);
     }, delay);
 
-    // 🔹 Send response in IST
-    res.send(
-      `🕒 Notification scheduled for ${scheduleIST} (IST) to ${tokens.length} admins`
-    );
+    res.send(`🕒 Notifications scheduled for ${scheduleDateTime.toLocaleString()} to ${tokens.length} admins`);
   } catch (error) {
-    console.error("❌ Error scheduling admin notifications:", error);
-    res.status(500).send("Error scheduling admin notifications");
+    console.error(error);
+    res.status(500).send("Error scheduling notifications for admins");
   }
 });
-
-
-
 
 // 🔹 Start server
 const PORT = 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
-
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log('Open http://localhost:3000/auth to authenticate Google Calendar');
+});
