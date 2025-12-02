@@ -1,9 +1,7 @@
 const express = require("express");
 const admin = require("firebase-admin"); // Firebase Admin
-const B2 = require("backblaze-b2"); // Backblaze B2
-const multer = require("multer"); // For handling file uploads
-const dotenv = require("dotenv");
-const { google } = require("googleapis");
+
+
 
 dotenv.config();
 
@@ -20,50 +18,6 @@ admin.initializeApp({
 });
 
 console.log("Firebase initialized successfully!");
-
-// 🔹 Google OAuth2 client for Meet
-const oAuth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
-
-oAuth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
-
-// 🔹 Generate Google Meet
-app.post("/create-meet", async (req, res) => {
-  const { summary, description, startDateTime, endDateTime } = req.body;
-
-  if (!summary || !startDateTime || !endDateTime) {
-    return res.status(400).send("Missing required fields: summary, startDateTime, endDateTime");
-  }
-
-  try {
-    const event = {
-      summary,
-      description,
-      start: { dateTime: new Date(startDateTime).toISOString() },
-      end: { dateTime: new Date(endDateTime).toISOString() },
-      conferenceData: { createRequest: { requestId: `${Date.now()}` } },
-    };
-
-    const response = await calendar.events.insert({
-      calendarId: "primary",
-      resource: event,
-      conferenceDataVersion: 1,
-    });
-
-    const meetLink = response.data.conferenceData.entryPoints?.find(
-      (ep) => ep.entryPointType === "video"
-    )?.uri;
-
-    res.status(200).json({ message: "Google Meet created successfully", meetLink });
-  } catch (error) {
-    console.error("❌ Error creating Google Meet:", error);
-    res.status(500).send("Error creating Google Meet");
-  }
-});
 
 
 // 🔹 Send notification route
