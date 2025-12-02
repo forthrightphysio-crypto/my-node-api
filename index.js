@@ -45,18 +45,18 @@ app.post("/create-meet", async (req, res) => {
     const startDateTime = `${date}T${startTime}:00+05:30`;
     const endDateTime = `${date}T${endTime}:00+05:30`;
 
-    const event = {
+   const event = {
   summary,
   start: { dateTime: startDateTime },
   end: { dateTime: endDateTime },
-
   conferenceData: {
     createRequest: {
       requestId: "meet-" + Date.now(),
-      conferenceSolutionKey: { type: "meet" },   // ✅ FIX HERE
+      conferenceSolutionKey: { type: "hangoutsMeet" },
     },
   },
 };
+
 
 
     // Insert event
