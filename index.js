@@ -141,8 +141,11 @@ app.post("/notify-users", async (req, res) => {
   if (!title || !body) return res.status(400).send("Missing title or body");
 
   try {
-    const snapshot = await admin.firestore().collection('userTokens').get();
-    const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
+    const snapshot = await admin.firestore().collection('users').get();
+    // Get fcmToken field from each user
+    const tokens = snapshot.docs
+      .map(doc => doc.data().fcmToken)
+      .filter(Boolean); // remove null/undefined
 
     if (!tokens.length) return res.status(200).send("No user tokens available");
 
@@ -151,7 +154,8 @@ app.post("/notify-users", async (req, res) => {
         await admin.messaging().send({ notification: { title, body }, token });
       } catch (err) {
         if (err.code === 'messaging/registration-token-not-registered') {
-          await admin.firestore().collection('userTokens').doc(token).delete();
+          console.log(`Token not registered: ${token}`);
+          // optionally remove token from Firestore
         }
       }
     }));
@@ -163,14 +167,15 @@ app.post("/notify-users", async (req, res) => {
   }
 });
 
-
 app.post("/schedule-users", async (req, res) => {
   const { title, body, date, time } = req.body;
   if (!title || !body || !date || !time) return res.status(400).send("Missing required fields");
 
   try {
-    const snapshot = await admin.firestore().collection('userTokens').get();
-    const tokens = snapshot.docs.map(doc => doc.id).filter(Boolean);
+    const snapshot = await admin.firestore().collection('users').get();
+    const tokens = snapshot.docs
+      .map(doc => doc.data().fcmToken)
+      .filter(Boolean);
 
     if (!tokens.length) return res.status(200).send("No user tokens available");
 
@@ -184,7 +189,7 @@ app.post("/schedule-users", async (req, res) => {
           await admin.messaging().send({ notification: { title, body }, token });
         } catch (err) {
           if (err.code === 'messaging/registration-token-not-registered') {
-            await admin.firestore().collection('userTokens').doc(token).delete();
+            console.log(`Token not registered: ${token}`);
           }
         }
       }));
