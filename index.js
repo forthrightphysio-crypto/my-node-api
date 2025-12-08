@@ -19,75 +19,6 @@ admin.initializeApp({
 
 console.log("Firebase initialized successfully!");
 
-// 🔹 Google OAuth2 setup
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID';
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'YOUR_CLIENT_SECRET';
-const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/oauth2callback';
-
-const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
-let calendar; // Will hold authenticated calendar
-
-// 🔹 Step 1: Redirect user to Google auth URL
-app.get('/auth', (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/calendar.events',
-    ],
-  });
-  res.redirect(url);
-});
-
-// 🔹 Step 2: Handle OAuth2 callback
-app.get('/oauth2callback', async (req, res) => {
-  const { code } = req.query;
-  try {
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-
-    // Initialize Calendar API with authenticated client
-    calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    res.send('✅ Google Calendar authentication successful! You can now POST /create-meet');
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('❌ Authentication failed');
-  }
-});
-
-// 🔹 Step 3: API to create Google Meet
-app.post('/create-meet', async (req, res) => {
-  try {
-    if (!calendar) return res.status(400).send('Authenticate first via /auth');
-
-    const { title, startTime, endTime } = req.body;
-
-    const event = {
-      summary: title || 'Scheduled Meeting',
-      start: { dateTime: startTime, timeZone: 'Asia/Kolkata' },
-      end: { dateTime: endTime, timeZone: 'Asia/Kolkata' },
-      conferenceData: {
-        createRequest: {
-          requestId: `meet-${Date.now()}`,
-          conferenceSolutionKey: { type: 'hangoutsMeet' },
-        },
-      },
-    };
-
-    const response = await calendar.events.insert({
-      calendarId: 'primary',
-      resource: event,
-      conferenceDataVersion: 1,
-    });
-
-    const meetLink = response.data.conferenceData.entryPoints[0].uri;
-    res.json({ meetLink });
-  } catch (err) {
-    console.error(err.response?.data || err);
-    res.status(500).json({ error: 'Failed to create meeting' });
-  }
-});
-
 // 🔹 Firebase Notification routes
 
 // Send notification
@@ -208,5 +139,4 @@ app.post("/schedule-admins", async (req, res) => {
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log('Open http://localhost:3000/auth to authenticate Google Calendar');
 });
